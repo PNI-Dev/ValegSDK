@@ -9,79 +9,88 @@ using System;
 
 public class Movement : MonoBehaviour
 {
-    [Header("Only For Android Platform")]
-    [Tooltip("부드러운 이동 조절")]
-    [Range(0.1f, 10f)]
-    public float m_Interpolation = 1f;
-
-
-    // 이동, 회전 입력값 변수들
-    float _horizontal;
-    float _vertical;
-    float _yaw;
-
-    float currentH = 0;
-    float currentV = 0;
-
-    Vector3 direction;
-    Vector3 movement;
-
     [Tooltip("점프 파워 조절")]
-    public float m_JumpPower = 5;
-    bool isJump;
-    float movementY;
+    public float JumpPower = 5;
+    private bool _isJump;
+    private float _movementY;
 
-    float smoothingvalue = 4f;
-    float velocityvalue = 3f;
-    float sidevelocityvalue = 2f;
-    public TextMeshProUGUI currentInterPolation;
-    public TextMeshProUGUI currentvelocity;
-    public TextMeshProUGUI currentsidevelocity;
+    private int _interpoloationLevel = 3;
+    private int _speedLevel = 3;
+    private int _sideSpeedLevel = 2;
+
+    public int InterPolationLevel
+    {
+        get { return _interpoloationLevel; }
+
+        set
+        {
+            _interpoloationLevel = value;
+            _currentInterPolationTextMeshProUGUI.text = _interpoloationLevel.ToString();
+        }
+    }
+    public int SpeedLevel
+    {
+        get { return _speedLevel; }
+        set
+        {
+            _speedLevel = value;
+            _currentSpeedTextMeshProUGUI.text = _speedLevel.ToString();
+        }
+    }
+    public int SideSpeedLevel
+    {
+        get { return _sideSpeedLevel; }
+        set
+        {
+            _sideSpeedLevel = value;
+            _currentSideSpeedTextMeshProUGUI.text = _sideSpeedLevel.ToString();
+        }
+    }
+
+    [SerializeField]
+    private TextMeshProUGUI _currentInterPolationTextMeshProUGUI;
+    [SerializeField]
+    private TextMeshProUGUI _currentSpeedTextMeshProUGUI;
+    [SerializeField]
+    private TextMeshProUGUI _currentSideSpeedTextMeshProUGUI;
 
     [Header("Common Platform")]
     [Tooltip("플레이어 몸")]
-    public GameObject player;
+    public GameObject OVRCamera;
     [Tooltip("플레이어 시야")]
-    public GameObject centerEye;
+    public GameObject CenterEye;
 
-    CharacterController cc;
+    private CharacterController _characterController;
 
-    [Space(15)]
-    [Tooltip("CharacterController이기 때문에 중력 따로 설정 필요")]
-    public float m_Gravity = -9.8f;
-    [Tooltip("이동 속도")]
-    public float m_Speed = 2f;
-    [Tooltip("옆걸음 속도")]
-    public float m_SideSpeed = 1.5f;
-    [Tooltip("회전 속도")]
-    public float m_LerpSpeed = 3f;
+    private Vector3 _direction;
+    private Vector3 _movement;
+    
+    private float _originAngle = 0f;
 
-    [Space(15)]
-    [Tooltip("각도 초기값")]
-    public float m_OriginAngle = 0f;
+    private float _lower = 0;
+    private float _upper = 1;
 
-    [Tooltip("[각도 리센터 사용 유무] \n사용시 머신이 껐다 켜져도 마지막 값에서 다시 돌아가고, \n미사용시 머신이 껐다 켜지면 0도로 돌아간다.")]
-    public bool isAngleRecenter;
+    private float _currentH;
+    private float _currentV;
 
-    public float _lower = 0;
-    public float _upper = 1;
+    void Awake()
+    {
+        _characterController = GetComponent<CharacterController>();
+        _isJump = false;
 
-    bool _isCheck;
-    float _valegOffset;
-    float _oculusOffset;
+        _currentInterPolationTextMeshProUGUI.text = _interpoloationLevel.ToString();
+        _currentSpeedTextMeshProUGUI.text = _speedLevel.ToString();
+        _currentSideSpeedTextMeshProUGUI.text = _sideSpeedLevel.ToString();
+    }
 
-    public bool AllowRecenter = true;
-
-
-    #region 입력 값 들어오는 메서드
+    #region 인풋값 메서드
     // 조이스틱 연결 유무
-    bool IsActiveControl()
+    private bool IsActiveControl()
     {
         return (Input.GetJoystickNames().Length > 0);
     }
-
     // 조이스틱 좌우 입력값
-    float getHorizontalValue()
+    private float GetHorizontalValue()
     {
 #if UNITY_ANDROID
         return Input.GetAxis("Axis_4");
@@ -89,19 +98,17 @@ public class Movement : MonoBehaviour
         return (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
 #endif
     }
-
     // 조이스틱 상하 입력값
-    float getVerticalValue()
+    private float GetVerticalValue()
     {
 #if UNITY_ANDROID
         return Input.GetAxis("Axis_3");
 #else
-        return (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
+        return -(InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
 #endif
     }
-
     // 조이스틱 회전 입력값
-    float getRotateValue()
+    private float GetRotateValue()
     {
 #if UNITY_ANDROID
         var v = Input.GetAxis("Axis_14");
@@ -112,136 +119,72 @@ public class Movement : MonoBehaviour
     }
     #endregion
 
-    #region 스무딩,사이드이동속도,이동속도 슬라이더 함수
+    #region UI 캔버스 조절 메서드
     //스무딩 슬라이더 조정
-    public virtual void ButtonPlus()
+    public void SmoothPlus()
     {
-        m_Interpolation -= 1f;
-        smoothingvalue += 1f;
-
-        if (m_Interpolation < 0.55f && smoothingvalue >= 5f)
+        if (InterPolationLevel == 5)
         {
-            m_Interpolation = 0.55f;
-            smoothingvalue = 5f;
-        }
-        currentInterPolation.text = smoothingvalue.ToString();
-    }
-
-    //스무딩 슬라이더 조정
-    public virtual void ButtonMinus()
-    {
-        if (m_Interpolation == 0.55f)
-        {
-            m_Interpolation = 1f;
-            smoothingvalue = 4f;
-        }
-        else if (smoothingvalue == 1f)
-        {
-            smoothingvalue = 1f;
-        }
-        else
-        {
-            m_Interpolation += 1f;
-            smoothingvalue -= 1f;
-            if (m_Interpolation > 5f)
-            {
-                m_Interpolation = 5f;
-            }
-        }
-        currentInterPolation.text = smoothingvalue.ToString();
-    }
-    //이동속도 조정
-    public virtual void VelocityButtonPlus()
-    {
-        if (m_Speed == 3f && velocityvalue >= 5f)
-        {
-            m_Speed = 3f;
-            velocityvalue = 5f;
             return;
         }
-        else
+
+        InterPolationLevel++;
+    }
+
+    //스무딩 슬라이더 조정
+    public void SmoothMinus()
+    {
+        if (InterPolationLevel == 1)
         {
-            m_Speed += 0.5f;
-            velocityvalue += 1f;
+            return;
         }
-        currentvelocity.text = velocityvalue.ToString();
+
+        InterPolationLevel--;
+    }
+    //이동속도 조정
+    public void SpeedPlusButton()
+    {
+        if (SpeedLevel == 5)
+        {
+            return;
+        }
+        SpeedLevel++;
     }
 
     //이동속도 슬라이더 조정
-    public virtual void VelocityButtonMinus()
+    public void SpeedMinusButton()
     {
-        if (m_Speed == 1f && velocityvalue == 1f)
+        if (SpeedLevel == 1)
         {
-            m_Speed = 1f;
-            velocityvalue = 1f;
             return;
         }
-        else
-        {
-            m_Speed -= 0.5f;
-            velocityvalue -= 1;
-        }
-        currentvelocity.text = velocityvalue.ToString();
+        SpeedLevel--;
     }
     //사이드 이동속도 조정
-    public virtual void SideVelocityButtonPlus()
+    public void SideSpeedPlusButton()
     {
-        if (m_SideSpeed == 3f && sidevelocityvalue >= 5f)
+        if (SideSpeedLevel == 5)
         {
-            m_SideSpeed = 3f;
-            sidevelocityvalue = 5f;
             return;
         }
-        else
-        {
-            m_SideSpeed += 0.5f;
-            sidevelocityvalue += 1f;
-        }
-        currentsidevelocity.text = sidevelocityvalue.ToString();
-
+        SideSpeedLevel++;
     }
 
     //사이드 이동속도 조정
-    public virtual void SideVelocityButtonMinus()
+    public void SideSpeedMinusButton()
     {
-        if (m_SideSpeed == 1f && sidevelocityvalue == 1f)
+        if (SideSpeedLevel == 1)
         {
-            m_SideSpeed = 1f;
-            sidevelocityvalue = 1f;
             return;
         }
-        else
-        {
-            m_SideSpeed -= 0.5f;
-            sidevelocityvalue -= 1;
-        }
-        currentsidevelocity.text = sidevelocityvalue.ToString();
+        SideSpeedLevel--;
     }
-
-
     #endregion
-
- 
-
-    void Awake()
-    {
-        cc = GetComponent<CharacterController>();
-        isJump = false;
-        currentInterPolation.text = smoothingvalue.ToString();
-        currentvelocity.text = velocityvalue.ToString();
-        currentsidevelocity.text = sidevelocityvalue.ToString();
-        _isCheck = false;
-    }
-
-    private void OnApplicationQuit()
-    {
-        print(centerEye.transform.eulerAngles.y);
-    }
 
     void Update()
     {
         // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
-        player.transform.position = this.gameObject.transform.position + new Vector3(0, 1.65f, 0);
+        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, 1.65f, 0);
 
 #if UNITY_ANDROID
         // 상하좌우 입력값 받기
@@ -300,88 +243,136 @@ public class Movement : MonoBehaviour
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).LowerDeadZone = _lower;
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
 
-        _horizontal = getHorizontalValue();
-        _vertical = getVerticalValue();
-        _yaw = getRotateValue();
-        print(_yaw);
-
-        if (cc.enabled == false)
+        if (_characterController.enabled == false)
         {
             return;
         }
 
         PlayerMove();
         PlayerRotate();
-        //PlayerCamera();
-        // 막대기, 리센터
-        if (OVRInput.GetDown(OVRInput.Button.One))
-        {
-            m_OriginAngle = centerEye.transform.eulerAngles.y - (_yaw * 180);
-            transform.localEulerAngles = new Vector3(0, centerEye.transform.localEulerAngles.y, 0);
-        }
-
-        //오큘러스 오프셋 설정
-        if (OVRInput.GetDown(OVRInput.Button.Two) && !PlayerPrefs.HasKey("isCompleteOculusOffset"))
-        {
-            _oculusOffset = _valegOffset;
-            PlayerPrefs.SetInt("isCompleteOculusOffset", 1);
-            PlayerPrefs.SetFloat("oculusOffset", _oculusOffset);
-        }
-
-        if (OVRInput.GetDown(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.LTouch))
-        {
-            PlayerPrefs.DeleteAll();
-            print("PlayerPrefs에 있는 데이터 모두를 삭제했습니다");
-        }
+        Recenter();
 #endif
     }
 
+    #region 리센터
+    private void Recenter()
+    {
+        if (IsAButtonPressed())
+        {
+            float inputRotate = GetRotateValue();
+            UpdateOriginAngle(inputRotate);
+            AlignWithCamera();
+        }
+    }
 
+    private bool IsAButtonPressed()
+    {
+        return OVRInput.GetDown(OVRInput.Button.One);
+    }
+
+    private void UpdateOriginAngle(float inputRotate)
+    {
+        float centerEyeYRotation = CenterEye.transform.eulerAngles.y;
+        _originAngle = centerEyeYRotation - (inputRotate * 180);
+    }
+
+    private void AlignWithCamera()
+    {
+        float cameraYRotation = CenterEye.transform.localEulerAngles.y;
+        transform.localEulerAngles = new Vector3(0, cameraYRotation, 0);
+    }
+    #endregion
+
+    #region 플레이어 이동
     private void PlayerMove()
     {
-        currentH = Mathf.Lerp(currentH, _horizontal, Time.deltaTime * m_Interpolation);
-        currentV = Mathf.Lerp(currentV, _vertical, Time.deltaTime * m_Interpolation);
-        direction = new Vector3(currentH * 0.7f, 0, -currentV);
-        movement = Vector3.Lerp(Vector3.zero, direction, 1);
-        cc.Move(transform.TransformDirection(movement) * m_Speed * Time.deltaTime);
+        var interpolation = ConvertInterPolation(InterPolationLevel);
+        var speed = ConvertSpeed(SpeedLevel);
+        var sideSpeed = ConvertSpeed(SideSpeedLevel);
+
+        var inputHorizontal = GetHorizontalValue();
+        var inputVertical = GetVerticalValue();
+
+        _currentH = SmoothInput(_currentH, inputHorizontal, interpolation);
+        _currentV = SmoothInput(_currentV, inputVertical, interpolation);
+
+        Vector3 movementDirection = CalculateMovementDirection(_currentH, _currentV, speed, sideSpeed);
+
+        MovePlayer(movementDirection);
     }
+    private float ConvertInterPolation(int level)
+    {
+        switch (level)
+        {
+            case 1:
+                return 3f;
+            case 2:
+                return 2f;
+            case 3:
+                return 1f;
+            case 4:
+                return 0.75f;
+            case 5:
+                return 0.5f;
+            default:
+                return 0;
+        }
+    }
+
+    private float ConvertSpeed(int level)
+    {
+        switch (level)
+        {
+            case 1:
+                return 1f;
+            case 2:
+                return 1.5f;
+            case 3:
+                return 2f;
+            case 4:
+                return 2.5f;
+            case 5:
+                return 3f;
+            default:
+                return 0;
+        }
+    }
+
+    private float SmoothInput(float currentValue, float targetValue, float interpolation)
+    {
+        return Mathf.Lerp(currentValue, targetValue, Time.deltaTime * interpolation);
+    }
+
+    private Vector3 CalculateMovementDirection(float horizontal, float vertical, float speed, float sideSpeed)
+    {
+        Vector3 direction = new Vector3(horizontal * 0.7f * sideSpeed, 0, vertical * speed);
+        return Vector3.Lerp(Vector3.zero, direction, 1);
+    }
+
+    private void MovePlayer(Vector3 movementDirection)
+    {
+        _characterController.Move(transform.TransformDirection(movementDirection) * Time.deltaTime);
+    }
+    #endregion
+
+    #region 플레이어 회전
     private void PlayerRotate()
     {
         if (IsActiveControl())
         {
-            transform.eulerAngles = new Vector3(transform.eulerAngles.x, Mathf.LerpAngle(transform.eulerAngles.y, isAngleRecenter == true ? m_OriginAngle + (_yaw * 180f) - _valegOffset : _yaw * 180f, Time.deltaTime * m_LerpSpeed * 5), transform.eulerAngles.z);
+            float inputRotate = GetRotateValue();
+            float currentYRotation = transform.eulerAngles.y;
+            float targetYRotation = _originAngle + (inputRotate * 180f);
+            float interpolationValue = Time.deltaTime * 15;
+
+            float newYRotation = Mathf.LerpAngle(currentYRotation, targetYRotation, interpolationValue);
+            transform.eulerAngles = new Vector3(transform.eulerAngles.x, newYRotation, transform.eulerAngles.z);
         }
         else
         {
-            m_OriginAngle = transform.eulerAngles.y;
-        }
-
-        if (transform.position.x != 0 && !_isCheck)
-        {
-            DoRecenter();
-            _isCheck = true;
-        }
-
-    }
-    private void PlayerCamera()
-    {
-        if (PlayerPrefs.HasKey("isCompleteOculusOffset"))
-        {
-            float oculusOffset = PlayerPrefs.GetFloat("oculusOffset");
-            player.transform.eulerAngles = transform.eulerAngles + new Vector3(0, -oculusOffset, 0);
+            _originAngle = transform.eulerAngles.y;
         }
     }
-    void DoRecenter()
-    {
-        if (AllowRecenter == false)
-        {
-            return;
-        }
-        AllowRecenter = true;
-        _valegOffset = m_OriginAngle + (_yaw * 180f);
-        Debug.LogError("offset " + _valegOffset);
-        //transform.eulerAngles -= new Vector3(0, _valegOffset, 0);
-        //player.transform.eulerAngles -= new Vector3(0, _valegOffset, 0);
-    }
+    #endregion
 
 }
