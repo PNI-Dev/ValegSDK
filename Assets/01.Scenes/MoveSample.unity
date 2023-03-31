@@ -6175,8 +6175,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   JumpPower: 5
   _currentInterPolationTextMeshProUGUI: {fileID: 1782951744957580876}
-  _currentSpeedTextMeshProUGUI: {fileID: 1689701670}
-  _currentSideSpeedTextMeshProUGUI: {fileID: 92271150}
+  _currentSpeedTextMeshProUGUI: {fileID: 1377672520}
+  _currentSideSpeedTextMeshProUGUI: {fileID: 943014784}
   OVRCamera: {fileID: 7658232706044745570}
   CenterEye: {fileID: 7658232706044745572}
 --- !u!1 &7658232706044745570 stripped
