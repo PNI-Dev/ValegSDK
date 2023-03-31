@@ -1,23 +1,16 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 using TMPro;
 using InControl;
-using System;
 
 public class Movement : MonoBehaviour
 {
+    // Public variables
     [Tooltip("점프 파워 조절")]
     public float JumpPower = 5;
-    private bool _isJump;
-    private float _movementY;
+    public GameObject OVRCamera;
+    public GameObject CenterEye;
 
-    private int _interpoloationLevel = 3;
-    private int _speedLevel = 3;
-    private int _sideSpeedLevel = 2;
-
+    // Properties
     public int InterPolationLevel
     {
         get { return _interpoloationLevel; }
@@ -47,6 +40,25 @@ public class Movement : MonoBehaviour
         }
     }
 
+    // Constants
+    private const float _lower = 0;
+    private const float _upper = 1;
+
+    // Integers
+    private int _interpoloationLevel = 3;
+    private int _speedLevel = 3;
+    private int _sideSpeedLevel = 2;
+
+    // Floats
+    private float _movementY;
+    private float _originAngle = 0f;
+    private float _currentH;
+    private float _currentV;
+
+    // Booleans
+    private bool _isJump;
+
+    // Serialized Fields
     [SerializeField]
     private TextMeshProUGUI _currentInterPolationTextMeshProUGUI;
     [SerializeField]
@@ -54,24 +66,8 @@ public class Movement : MonoBehaviour
     [SerializeField]
     private TextMeshProUGUI _currentSideSpeedTextMeshProUGUI;
 
-    [Header("Common Platform")]
-    [Tooltip("플레이어 몸")]
-    public GameObject OVRCamera;
-    [Tooltip("플레이어 시야")]
-    public GameObject CenterEye;
-
+    // Components
     private CharacterController _characterController;
-
-    private Vector3 _direction;
-    private Vector3 _movement;
-    
-    private float _originAngle = 0f;
-
-    private float _lower = 0;
-    private float _upper = 1;
-
-    private float _currentH;
-    private float _currentV;
 
     void Awake()
     {
@@ -235,7 +231,7 @@ public class Movement : MonoBehaviour
 #else
         InputDevice inputDevice = InputManager.ActiveDevice;
 
-        if (inputDevice == null)
+        if (inputDevice == null || !_characterController.enabled)
         {
             return;
         }
@@ -243,45 +239,15 @@ public class Movement : MonoBehaviour
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).LowerDeadZone = _lower;
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
 
-        if (_characterController.enabled == false)
-        {
-            return;
-        }
-
+        //플레이어 이동
         PlayerMove();
+        //플레이어 회전
         PlayerRotate();
+        //리센터 (발레그의 전진방향으로 전진이 되지 않을때 오큘러스 카메라 방향으로 수동 조정기능)
         Recenter();
 #endif
     }
 
-    #region 리센터
-    private void Recenter()
-    {
-        if (IsAButtonPressed())
-        {
-            float inputRotate = GetRotateValue();
-            UpdateOriginAngle(inputRotate);
-            AlignWithCamera();
-        }
-    }
-
-    private bool IsAButtonPressed()
-    {
-        return OVRInput.GetDown(OVRInput.Button.One);
-    }
-
-    private void UpdateOriginAngle(float inputRotate)
-    {
-        float centerEyeYRotation = CenterEye.transform.eulerAngles.y;
-        _originAngle = centerEyeYRotation - (inputRotate * 180);
-    }
-
-    private void AlignWithCamera()
-    {
-        float cameraYRotation = CenterEye.transform.localEulerAngles.y;
-        transform.localEulerAngles = new Vector3(0, cameraYRotation, 0);
-    }
-    #endregion
 
     #region 플레이어 이동
     private void PlayerMove()
@@ -300,6 +266,7 @@ public class Movement : MonoBehaviour
 
         MovePlayer(movementDirection);
     }
+
     private float ConvertInterPolation(int level)
     {
         switch (level)
@@ -375,4 +342,32 @@ public class Movement : MonoBehaviour
     }
     #endregion
 
+    #region 리센터
+    private void Recenter()
+    {
+        if (IsAButtonPressed())
+        {
+            float inputRotate = GetRotateValue();
+            UpdateOriginAngle(inputRotate);
+            AlignWithCamera();
+        }
+    }
+
+    private bool IsAButtonPressed()
+    {
+        return OVRInput.GetDown(OVRInput.Button.One);
+    }
+
+    private void UpdateOriginAngle(float inputRotate)
+    {
+        float centerEyeYRotation = CenterEye.transform.eulerAngles.y;
+        _originAngle = centerEyeYRotation - (inputRotate * 180);
+    }
+
+    private void AlignWithCamera()
+    {
+        float cameraYRotation = CenterEye.transform.localEulerAngles.y;
+        transform.localEulerAngles = new Vector3(0, cameraYRotation, 0);
+    }
+    #endregion
 }
