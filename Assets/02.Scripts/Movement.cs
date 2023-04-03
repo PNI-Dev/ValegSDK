@@ -50,13 +50,11 @@ public class Movement : MonoBehaviour
     private int _sideSpeedLevel = 2;
 
     // Floats
-    private float _movementY;
     private float _originAngle = 0f;
     private float _currentH;
     private float _currentV;
 
     // Booleans
-    private bool _isJump;
 
     // Serialized Fields
     [SerializeField]
@@ -72,7 +70,6 @@ public class Movement : MonoBehaviour
     void Awake()
     {
         _characterController = GetComponent<CharacterController>();
-        _isJump = false;
 
         _currentInterPolationTextMeshProUGUI.text = _interpoloationLevel.ToString();
         _currentSpeedTextMeshProUGUI.text = _speedLevel.ToString();
@@ -89,18 +86,22 @@ public class Movement : MonoBehaviour
     private float GetHorizontalValue()
     {
 #if UNITY_ANDROID
-        return Input.GetAxis("Axis_4");
+        float input = Input.GetAxis("Axis_4");
+        return input;
 #else
-        return (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
+        float input= (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
+        return input;
 #endif
     }
-    // 조이스틱 상하 입력값
+    // 조이스틱 전후진 입력값
     private float GetVerticalValue()
     {
 #if UNITY_ANDROID
-        return Input.GetAxis("Axis_3");
+        float input = Input.GetAxis("Axis_3");
+        return -input;
 #else
-        return -(InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
+        float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
+        return -input;
 #endif
     }
     // 조이스틱 회전 입력값
@@ -108,8 +109,9 @@ public class Movement : MonoBehaviour
     {
 #if UNITY_ANDROID
         var v = Input.GetAxis("Axis_14");
-        return v;
+        return -v;
 #else
+        float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
         return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
 #endif
     }
@@ -179,56 +181,8 @@ public class Movement : MonoBehaviour
 
     void Update()
     {
-        // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
-        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, 1.65f, 0);
-
-#if UNITY_ANDROID
-        // 상하좌우 입력값 받기
-        androidX = getHorizontalValue();
-        androidY = getVerticalValue();
-
-        // m_Interpolation 변수 값을 조절하여 부드러움을 조절
-        currentH = Mathf.Lerp(currentH, androidX, Time.deltaTime * m_Interpolation);
-        currentV = Mathf.Lerp(currentV, androidY, Time.deltaTime * m_Interpolation);
-        direction = new Vector3(currentH * m_SideSpeed, 0, -currentV * m_Speed);
-        movement = Vector3.Lerp(Vector3.zero, direction, 1);
-
-        // 점프
-        if (isJump == false && Input.GetKeyDown(KeyCode.JoystickButton8))
-        {
-            isJump = true;
-            movementY = m_JumpPower;
-        }
-        // 땅에 닿았을 때
-        else if (cc.isGrounded == true)
-        {
-            isJump = false;
-        }
-        // 점프있을 때, 중력 적용
-        movementY += m_Gravity * Time.deltaTime;
-        movement.y = movementY;
-
-        cc.Move(transform.TransformDirection(movement) * Time.deltaTime);
-
-        // 회전 입력값 받기
-        androidRot = getRotateValue();
-        if (IsActiveControl())
-        {
-            transform.eulerAngles = new Vector3(transform.eulerAngles.x, Mathf.LerpAngle(transform.eulerAngles.y, m_OriginAngle + (androidRot * 180f), Time.deltaTime * m_LerpSpeed * 5), transform.eulerAngles.z);
-        }
-        else
-        {
-            m_OriginAngle = transform.eulerAngles.y;
-        }
-
-        // OVRCameraRig가 바라보는 방향과 VALEG의 전진방향이 다를 때, 맞춰주기.
-        if (OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch))
-        {
-            m_OriginAngle = centerEye.transform.eulerAngles.y - (androidRot * 180f);
-            transform.localEulerAngles = new Vector3(0, centerEye.transform.localEulerAngles.y, 0);
-        }
-
-#else
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        // Window에서 실행할 코드 작성
         InputDevice inputDevice = InputManager.ActiveDevice;
 
         if (inputDevice == null || !_characterController.enabled)
@@ -238,6 +192,9 @@ public class Movement : MonoBehaviour
 
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).LowerDeadZone = _lower;
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
+#endif
+        // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
+        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, 1.65f, 0);
 
         //플레이어 이동
         PlayerMove();
@@ -245,7 +202,6 @@ public class Movement : MonoBehaviour
         PlayerRotate();
         //리센터 (발레그의 전진방향으로 전진이 되지 않을때 오큘러스 카메라 방향으로 수동 조정기능)
         Recenter();
-#endif
     }
 
 
