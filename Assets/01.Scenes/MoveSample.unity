@@ -6409,13 +6409,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e7e7c8c38c22c64282a225aca8352d2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  JumpPower: 5
   OVRCamera: {fileID: 7658232706044745570}
   CenterEye: {fileID: 7658232706044745572}
   _currentInterPolationTextMeshProUGUI: {fileID: 1782951744957580876}
   _currentSpeedTextMeshProUGUI: {fileID: 1377672520}
   _currentSideSpeedTextMeshProUGUI: {fileID: 943014784}
-  axisText: {fileID: 431001690}
+  debugText: {fileID: 0}
 --- !u!1 &7658232706044745570 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2240754387772108798, guid: fd165e861acc46349a2e1bacf89b3e45, type: 3}

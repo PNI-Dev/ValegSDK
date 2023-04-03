@@ -4,11 +4,40 @@ using InControl;
 
 public class Movement : MonoBehaviour
 {
-    // Public variables
-    [Tooltip("점프 파워 조절")]
-    public float JumpPower = 5;
+    [Space(15)]
+    /// <summary>
+    /// 카메라가 붙어 있는 상위 부모 오브젝트
+    /// </summary>
     public GameObject OVRCamera;
+    /// <summary>
+    /// 실제 카메라가 붙어 있는 오브젝트
+    /// </summary>
     public GameObject CenterEye;
+
+    // Constants
+    /// <summary>
+    /// 윈도우 플랫폼에서 적용되는 데드존 변수, Update에서 값을 일정하게 넣어줘야 함. 이유는 입력을 받을 때 Incontrol 서드 파티 에셋을 사용하는데 안 넣어주면 회전값이 제대로 안 나옴 (정확한 이유 확인은 모르겠음)
+    /// </summary>
+    private const float _lower = 0f;
+    /// <summary>
+    /// 윈도우 플랫폼에서 적용되는 데드존 변수, Update에서 값을 일정하게 넣어줘야 함. 이유는 입력을 받을 때 Incontrol 서드 파티 에셋을 사용하는데 안 넣어주면 회전값이 제대로 안 나옴 (정확한 이유 확인은 모르겠음)
+    /// </summary>
+    private const float _upper = 1f;
+
+    // Integers
+
+    /// <summary>
+    /// 캔버스에서 부드러움을 5단계로 나누기 위한 Level (실제 디바이스에 적용되는 값은 아님, UI용)
+    /// </summary>
+    private int _interpoloationLevel = 3;
+    /// <summary>
+    /// 캔버스에서 전후진 속도를 5단계로 나누기 위한 Level (실제 디바이스에 적용되는 값은 아님, UI용)
+    /// </summary>
+    private int _speedLevel = 3;
+    /// <summary>
+    /// 캔버스에서 사이드 이동속도를 5단계로 나누기 위한 Level (실제 디바이스에 적용되는 값은 아님, UI용)
+    /// </summary>
+    private int _sideSpeedLevel = 2;
 
     // Properties
     public int InterPolationLevel
@@ -40,32 +69,61 @@ public class Movement : MonoBehaviour
         }
     }
 
-    // Constants
-    private const float _lower = 0;
-    private const float _upper = 1;
-
-    // Integers
-    private int _interpoloationLevel = 3;
-    private int _speedLevel = 3;
-    private int _sideSpeedLevel = 2;
-
     // Floats
+    /// <summary>
+    /// 회전용 변수
+    /// </summary>
     private float _originAngle = 0f;
-    private float _currentH;
-    private float _currentV;
-
-    // Booleans
+    /// <summary>
+    /// 움직임의 부드러움을 위한 보간용 변수
+    /// </summary>
+    private float _currentH = 0f;
+    /// <summary>
+    /// 움직임의 부드러움을 위한 보간용 변수
+    /// </summary>
+    private float _currentV = 0f;
+    /// <summary>
+    /// 오큘러스 카메라 높이 Offset 변수
+    /// </summary>
+    private float _ovrCameraRigHeight = 1.65f;
+    /// <summary>
+    /// 점프에 사용되는 변수
+    /// </summary>
+    private float _yVelocity = 0f;
+    /// <summary>
+    /// 점프 파워
+    /// </summary>
+    private float _jumpPower = 5;
+    /// <summary>
+    /// 중력
+    /// </summary>
+    private float _gravity = -9.8f;
 
     // Serialized Fields
+    [Space(15)]
+    /// <summary>
+    /// UI 캔버스 Text
+    /// </summary>
     [SerializeField]
     private TextMeshProUGUI _currentInterPolationTextMeshProUGUI;
+    /// <summary>
+    /// UI 캔버스 Text
+    /// </summary>
     [SerializeField]
     private TextMeshProUGUI _currentSpeedTextMeshProUGUI;
+    /// <summary>
+    /// UI 캔버스 Text
+    /// </summary>
     [SerializeField]
     private TextMeshProUGUI _currentSideSpeedTextMeshProUGUI;
 
     // Components
     private CharacterController _characterController;
+
+    /// <summary>
+    /// Window, 유니티 Editor용 변수
+    /// </summary>
+    private InputDevice inputDevice => InputManager.ActiveDevice ?? null;
 
     void Awake()
     {
@@ -74,6 +132,40 @@ public class Movement : MonoBehaviour
         _currentInterPolationTextMeshProUGUI.text = _interpoloationLevel.ToString();
         _currentSpeedTextMeshProUGUI.text = _speedLevel.ToString();
         _currentSideSpeedTextMeshProUGUI.text = _sideSpeedLevel.ToString();
+    }
+
+    void Update()
+    {
+        if (!_characterController.enabled)
+        {
+            return;
+        }
+
+        // 윈도우 빌드용과 유니티 에디터 전용 (윈도우, 안드로이드 포함)
+        // apk로 추출하면 적용되지 않습니다.
+
+        //이렇게 나눈 이유는, 윈도우와 유니티 에디터에서는 발레그 연결시 InControl 서드 파티에셋을 사용하고, apk 파일로 추출 시 사용하지 않기 때문입니다.
+        //플랫폼에 따라 다르게 Input이 들어오기에 나눴습니다.
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+
+        if (inputDevice == null)
+        {
+            return;
+        }
+
+        InputManager.ActiveDevice.GetControl(InputControlType.Analog1).LowerDeadZone = _lower;
+        InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
+
+#endif
+
+        // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
+        SetOVRCameraPosition();
+        //플레이어 이동
+        UpdatePlayerMovement();
+        //플레이어 회전
+        PlayerRotate();
+        //리센터 (발레그의 전진방향으로 전진이 되지 않을때 오큘러스 카메라 방향으로 수동 조정기능)
+        Recenter();
     }
 
     #region 인풋값 메서드
@@ -85,34 +177,34 @@ public class Movement : MonoBehaviour
     // 조이스틱 좌우 입력값
     private float GetHorizontalValue()
     {
-#if UNITY_ANDROID
-        float input = Input.GetAxis("Axis_4");
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
         return input;
 #else
-        float input= (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
+        float input = Input.GetAxis("Axis_4");
         return input;
 #endif
     }
     // 조이스틱 전후진 입력값
     private float GetVerticalValue()
     {
-#if UNITY_ANDROID
-        float input = Input.GetAxis("Axis_3");
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
         return -input;
 #else
-        float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
+        float input = Input.GetAxis("Axis_3");
         return -input;
 #endif
     }
     // 조이스틱 회전 입력값
     private float GetRotateValue()
     {
-#if UNITY_ANDROID
-        var v = Input.GetAxis("Axis_14");
-        return -v;
-#else
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
         return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
+#else
+        var v = Input.GetAxis("Axis_14");
+        return -v;
 #endif
     }
     #endregion
@@ -179,34 +271,15 @@ public class Movement : MonoBehaviour
     }
     #endregion
 
-    void Update()
+    #region 카메라 위치 보정
+    private void SetOVRCameraPosition()
     {
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        // Window에서 실행할 코드 작성
-        InputDevice inputDevice = InputManager.ActiveDevice;
-
-        if (inputDevice == null || !_characterController.enabled)
-        {
-            return;
-        }
-
-        InputManager.ActiveDevice.GetControl(InputControlType.Analog1).LowerDeadZone = _lower;
-        InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
-#endif
-        // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
-        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, 1.65f, 0);
-
-        //플레이어 이동
-        PlayerMove();
-        //플레이어 회전
-        PlayerRotate();
-        //리센터 (발레그의 전진방향으로 전진이 되지 않을때 오큘러스 카메라 방향으로 수동 조정기능)
-        Recenter();
+        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, _ovrCameraRigHeight, 0);
     }
-
+    #endregion
 
     #region 플레이어 이동
-    private void PlayerMove()
+    private void UpdatePlayerMovement()
     {
         var interpolation = ConvertInterPolation(InterPolationLevel);
         var speed = ConvertSpeed(SpeedLevel);
@@ -220,7 +293,10 @@ public class Movement : MonoBehaviour
 
         Vector3 movementDirection = CalculateMovementDirection(_currentH, _currentV, speed, sideSpeed);
 
-        MovePlayer(movementDirection);
+        //플레이어 점프
+        PlayerJump();
+
+        ApplyPlayerMovement(movementDirection);
     }
 
     private float ConvertInterPolation(int level)
@@ -272,9 +348,34 @@ public class Movement : MonoBehaviour
         return Vector3.Lerp(Vector3.zero, direction, 1);
     }
 
-    private void MovePlayer(Vector3 movementDirection)
+    private void ApplyPlayerMovement(Vector3 movementDirection)
     {
+        //중력 계산
+        movementDirection.y += _gravity * Time.deltaTime;
+
         _characterController.Move(transform.TransformDirection(movementDirection) * Time.deltaTime);
+    }
+
+    private void PlayerJump()
+    {
+
+        //플랫폼에 따라 Input이 달라짐
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        var jumpKeycode = KeyCode.Joystick3Button8;
+#else
+        var jumpKeycode = KeyCode.Joystick1Button6;
+#endif
+
+        if (Input.GetKeyDown(jumpKeycode) && _characterController.isGrounded)
+        {
+            float jumpVelocity = Mathf.Sqrt(_jumpPower * -2f * _gravity);
+            _yVelocity = jumpVelocity;
+        }
+
+        _yVelocity += _gravity * Time.deltaTime;
+        Vector3 jumpDirection = new Vector3(0, _yVelocity, 0);
+
+        _characterController.Move(jumpDirection * Time.deltaTime);
     }
     #endregion
 
