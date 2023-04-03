@@ -201,7 +201,7 @@ public class Movement : MonoBehaviour
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
-        return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
+        return -(InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
 #else
         var v = Input.GetAxis("Axis_14");
         return -v;
