@@ -8,7 +8,7 @@ public class Movement : MonoBehaviour
     /// <summary>
     /// 카메라가 붙어 있는 상위 부모 오브젝트
     /// </summary>
-    public GameObject OVRCamera;
+    public GameObject CameraParent;
     /// <summary>
     /// 실제 카메라가 붙어 있는 오브젝트
     /// </summary>
@@ -274,7 +274,7 @@ public class Movement : MonoBehaviour
     #region 카메라 위치 보정
     private void SetOVRCameraPosition()
     {
-        OVRCamera.transform.position = this.gameObject.transform.position + new Vector3(0, _ovrCameraRigHeight, 0);
+        CameraParent.transform.position = this.gameObject.transform.position + new Vector3(0, _ovrCameraRigHeight, 0);
     }
     #endregion
 
