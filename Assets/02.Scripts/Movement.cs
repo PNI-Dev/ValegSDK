@@ -344,7 +344,7 @@ public class Movement : MonoBehaviour
 
     private Vector3 CalculateMovementDirection(float horizontal, float vertical, float speed, float sideSpeed)
     {
-        Vector3 direction = new Vector3(horizontal * 0.7f * sideSpeed, 0, vertical * speed);
+        Vector3 direction = new Vector3(horizontal * sideSpeed, 0, vertical * speed);
         return Vector3.Lerp(Vector3.zero, direction, 1);
     }
 
