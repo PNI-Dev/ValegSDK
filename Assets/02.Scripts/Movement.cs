@@ -339,13 +339,17 @@ public class Movement : MonoBehaviour
 
     private float SmoothInput(float currentValue, float targetValue, float interpolation)
     {
-        return Mathf.Lerp(currentValue, targetValue, Time.deltaTime * interpolation);
+        float lerpSpeed = Time.deltaTime * interpolation;
+        return Mathf.Lerp(currentValue, targetValue, lerpSpeed);
     }
 
     private Vector3 CalculateMovementDirection(float horizontal, float vertical, float speed, float sideSpeed)
     {
-        Vector3 direction = new Vector3(horizontal * sideSpeed, 0, vertical * speed);
-        return Vector3.Lerp(Vector3.zero, direction, 1);
+        float adjustedHorizontal = horizontal * sideSpeed;
+        float adjustedVertical = vertical * speed;
+
+        Vector3 direction = new Vector3(adjustedHorizontal, 0, adjustedVertical);
+        return direction;
     }
 
     private void ApplyPlayerMovement(Vector3 movementDirection)
