@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using InControl;
+using System.Linq;
 
 public class Movement : MonoBehaviour
 {
@@ -68,6 +69,8 @@ public class Movement : MonoBehaviour
             _currentSideSpeedTextMeshProUGUI.text = _sideSpeedLevel.ToString();
         }
     }
+
+    private bool _isValegOn => NativeInputDeviceManager.isValegOn;
 
     // Floats
     /// <summary>
@@ -150,6 +153,7 @@ public class Movement : MonoBehaviour
 
         if (inputDevice == null)
         {
+            Debug.Log("inputDevice가 null입니다");
             return;
         }
 
@@ -172,7 +176,7 @@ public class Movement : MonoBehaviour
     // 조이스틱 연결 유무
     private bool IsActiveControl()
     {
-        return (Input.GetJoystickNames().Length > 0);
+        return _isValegOn;
     }
     // 조이스틱 좌우 입력값
     private float GetHorizontalValue()
