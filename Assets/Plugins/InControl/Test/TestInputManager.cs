@@ -21,8 +21,7 @@ namespace InControl
 		readonly List<LogMessage> logMessages = new List<LogMessage>();
 		bool isPaused;
 
-
-		void OnEnable()
+        void OnEnable()
 		{
 			Application.targetFrameRate = -1;
 			QualitySettings.vSyncCount = 0;

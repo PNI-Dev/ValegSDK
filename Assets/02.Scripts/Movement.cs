@@ -176,7 +176,11 @@ public class Movement : MonoBehaviour
     // 조이스틱 연결 유무
     private bool IsActiveControl()
     {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         return _isValegOn;
+#else
+return true;
+#endif
     }
     // 조이스틱 좌우 입력값
     private float GetHorizontalValue()
@@ -205,10 +209,11 @@ public class Movement : MonoBehaviour
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
-        return -(InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
+        return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
 #else
         var v = Input.GetAxis("Axis_14");
-        return -v;
+        return v;
+       
 #endif
     }
     #endregion

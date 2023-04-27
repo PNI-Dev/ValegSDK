@@ -89,7 +89,7 @@ namespace InControl
                         stringBuilder.AppendFormat("Buttons: {0}\n", deviceInfo.numButtons);
                         stringBuilder.AppendFormat("Analogs: {0}\n", deviceInfo.numAnalogs);
 
-                        if (deviceInfo.driverType == InputDeviceDriverType.DirectInput && deviceInfo.numButtons == 16 && deviceInfo.numAnalogs == 8)
+                        if (deviceInfo.driverType == InputDeviceDriverType.DirectInput)
                         {
                             isValegOn = true;
                         }
