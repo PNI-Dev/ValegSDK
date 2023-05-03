@@ -1,14 +1,22 @@
-﻿/************************************************************************************
-Copyright : Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
-
-Your use of this SDK or tool is subject to the Oculus SDK License Agreement, available at
-https://developer.oculus.com/licenses/oculussdk/
-
-Unless required by applicable law or agreed to in writing, the Utilities SDK distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
-ANY KIND, either express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-************************************************************************************/
+﻿/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * Licensed under the Oculus SDK License Agreement (the "License");
+ * you may not use the Oculus SDK except in compliance with the License,
+ * which is provided at the time of installation or download, or which
+ * otherwise accompanies this software in either electronic or hard copy form.
+ *
+ * You may obtain a copy of the License at
+ *
+ * https://developer.oculus.com/licenses/oculussdk/
+ *
+ * Unless required by applicable law or agreed to in writing, the Oculus SDK
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 using UnityEngine;
 
@@ -43,9 +51,34 @@ public class OVRSceneVolume : MonoBehaviour, IOVRSceneComponent
 	/// </remarks>
 	public Vector3 Dimensions => new Vector3(Width, Height, Depth);
 
+	/// <summary>
+	/// Whether the child transforms will be scaled according to the dimensions of this volume.
+	/// </summary>
+	/// <remarks>If set to True, all the child transforms will be scaled to the dimensions of this volume immediately.
+	/// And, if it's set to False, dimensions of this volume will no longer affect the child transforms, and child
+	/// transforms will retain their current scale.</remarks>
+	public bool ScaleChildren
+	{
+		get => _scaleChildren;
+		set {
+			_scaleChildren = value;
+			if(_scaleChildren && _sceneAnchor.Space.Valid)
+			{
+				SetChildScale(transform, Dimensions);
+			}
+		}
+	}
+
+	[Tooltip("When enabled, scales the child transforms according to the dimensions of this volume")]
+	[SerializeField]
+	private bool _scaleChildren = true;
+
+	private OVRSceneAnchor _sceneAnchor;
+
 	private void Awake()
 	{
-		if (GetComponent<OVRSceneAnchor>().Space.Valid)
+		_sceneAnchor = GetComponent<OVRSceneAnchor>();
+		if (_sceneAnchor.Space.Valid)
 		{
 			((IOVRSceneComponent)this).Initialize();
 		}
@@ -53,7 +86,7 @@ public class OVRSceneVolume : MonoBehaviour, IOVRSceneComponent
 
 	void IOVRSceneComponent.Initialize()
 	{
-		if (OVRPlugin.GetSpaceBoundingBox3D(GetComponent<OVRSceneAnchor>().Space, out var bounds))
+		if (OVRPlugin.GetSpaceBoundingBox3D(_sceneAnchor.Space, out var bounds))
 		{
 			Width = bounds.Size.w;
 			Height = bounds.Size.h;
@@ -61,18 +94,25 @@ public class OVRSceneVolume : MonoBehaviour, IOVRSceneComponent
 
 			var dimensions = Dimensions;
 			OVRSceneManager.Development.Log(nameof(OVRSceneVolume),
-				$"[{GetComponent<OVRSceneAnchor>().Uuid}] Volume has dimensions {dimensions}.");
+				$"[{_sceneAnchor.Uuid}] Volume has dimensions {dimensions}.");
 
-			var parentTransform = transform;
-			for (var i = 0; i < parentTransform.childCount; i++)
+			if (ScaleChildren)
 			{
-				parentTransform.GetChild(i).localScale = dimensions;
+				SetChildScale(transform, dimensions);
 			}
 		}
 		else
 		{
 			OVRSceneManager.Development.LogError(nameof(OVRSceneVolume),
-				$"[{GetComponent<OVRSceneAnchor>().Space}] Failed to retrieve volume's dimensions.");
+				$"[{_sceneAnchor.Space}] Failed to retrieve volume's dimensions.");
+		}
+	}
+
+	private static void SetChildScale(Transform parentTransform, Vector3 dimensions)
+	{
+		for (var i = 0; i < parentTransform.childCount; i++)
+		{
+			parentTransform.GetChild(i).localScale = dimensions;
 		}
 	}
 }

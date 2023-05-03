@@ -1,14 +1,22 @@
-/************************************************************************************
-Copyright : Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
-
-Your use of this SDK or tool is subject to the Oculus SDK License Agreement, available at
-https://developer.oculus.com/licenses/oculussdk/
-
-Unless required by applicable law or agreed to in writing, the Utilities SDK distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
-ANY KIND, either express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-************************************************************************************/
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * Licensed under the Oculus SDK License Agreement (the "License");
+ * you may not use the Oculus SDK except in compliance with the License,
+ * which is provided at the time of installation or download, or which
+ * otherwise accompanies this software in either electronic or hard copy form.
+ *
+ * You may obtain a copy of the License at
+ *
+ * https://developer.oculus.com/licenses/oculussdk/
+ *
+ * Unless required by applicable law or agreed to in writing, the Oculus SDK
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 using System;
 using System.Collections;
@@ -419,15 +427,15 @@ namespace Assets.Oculus.VR.Editor
 			var script = MonoScript.FromScriptableObject(this);
 			string assetPath = AssetDatabase.GetAssetPath(script);
 			string editorPath = Path.GetDirectoryName(assetPath);
-			string odhIconPath = Path.Combine(editorPath, "Textures\\odh_icon.png");
+			string odhIconPath = Path.Combine(editorPath, "Textures\\mqdh_icon.png");
 			Texture ODHIcon = (Texture)EditorGUIUtility.Load(odhIconPath);
 			GUILayout.Box(ODHIcon, GUILayout.Width(60.0f), GUILayout.Height(60.0f));
 
 			GUILayout.BeginVertical();
 
-			EditorGUILayout.LabelField("<b>Oculus Developer Hub</b> is a desktop companion tool that can upload builds, manage apps and reduce friction in daily Quest development.",
+			EditorGUILayout.LabelField("<b>Meta Quest Developer Hub</b> is a desktop companion tool that can upload builds, manage apps and reduce friction in daily Quest development.",
 				odhCalloutStyle);
-			GUIContent ODHLabel = new GUIContent("Download Oculus Developer Hub");
+			GUIContent ODHLabel = new GUIContent("Download Meta Quest Developer Hub");
 #if UNITY_2021_1_OR_NEWER
 			if (EditorGUILayout.LinkButton(ODHLabel))
 #else
@@ -453,6 +461,7 @@ namespace Assets.Oculus.VR.Editor
 			{
 				targetDeviceTypes.Add(OVRProjectConfig.DeviceType.Quest);
 				targetDeviceTypes.Add(OVRProjectConfig.DeviceType.Quest2);
+				targetDeviceTypes.Add(OVRProjectConfig.DeviceType.QuestPro);
 			}
 
 			if (targetDeviceTypes.Count != 0)

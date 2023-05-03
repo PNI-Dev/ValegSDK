@@ -2,6 +2,8 @@ using UnityEngine;
 using TMPro;
 using InControl;
 using System.Linq;
+using UnityEngine.InputSystem;
+using System.Collections.Generic;
 
 public class Movement : MonoBehaviour
 {
@@ -70,7 +72,7 @@ public class Movement : MonoBehaviour
         }
     }
 
-    private bool _isValegOn => NativeInputDeviceManager.isValegOn;
+    private bool _isValegOn => IsActiveControl();
 
     // Floats
     /// <summary>
@@ -126,7 +128,7 @@ public class Movement : MonoBehaviour
     /// <summary>
     /// Window, 유니티 Editor용 변수
     /// </summary>
-    private InputDevice inputDevice => InputManager.ActiveDevice ?? null;
+    private InControl.InputDevice inputDevice => InControl.InputManager.ActiveDevice ?? null;
 
     void Awake()
     {
@@ -177,9 +179,10 @@ public class Movement : MonoBehaviour
     private bool IsActiveControl()
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        return _isValegOn;
+        return NativeInputDeviceManager.isValegOn;
 #else
-return true;
+        List<Gamepad> gamepads = new List<Gamepad>(Gamepad.all);
+        return gamepads.Count > 0;
 #endif
     }
     // 조이스틱 좌우 입력값
@@ -395,7 +398,7 @@ return true;
     #region 플레이어 회전
     private void PlayerRotate()
     {
-        if (IsActiveControl())
+        if (_isValegOn)
         {
             float inputRotate = GetRotateValue();
             float currentYRotation = transform.eulerAngles.y;

@@ -1,19 +1,28 @@
-/************************************************************************************
-Copyright : Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
-
-Your use of this SDK or tool is subject to the Oculus SDK License Agreement, available at
-https://developer.oculus.com/licenses/oculussdk/
-
-Unless required by applicable law or agreed to in writing, the Utilities SDK distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
-ANY KIND, either express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-************************************************************************************/
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * Licensed under the Oculus SDK License Agreement (the "License");
+ * you may not use the Oculus SDK except in compliance with the License,
+ * which is provided at the time of installation or download, or which
+ * otherwise accompanies this software in either electronic or hard copy form.
+ *
+ * You may obtain a copy of the License at
+ *
+ * https://developer.oculus.com/licenses/oculussdk/
+ *
+ * Unless required by applicable law or agreed to in writing, the Oculus SDK
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System;
+using System.Linq;
 using UnityEngine;
 using OVRSimpleJSON;
 
@@ -38,6 +47,22 @@ public enum OVRTextureFormat
 	JPEG,
 }
 
+/// <summary>
+/// This enum represents a simplified representation on how Texture Filter quality is implemented in Unity.
+/// The values set in this enum are NOT random and are directly used by ApplyTextureQuality() and DetectTextureQuality()
+/// to get/set the correspondent setup in Unity.
+/// </summary>
+public enum OVRTextureQualityFiltering
+{
+	None = -1,
+	Bilinear = 0,
+	Trilinear = 1,
+	Aniso2x = 2,
+	Aniso4x = 3,
+	Aniso8x = 4,
+	Aniso16x = 5,
+}
+
 public struct OVRBinaryChunk
 {
 	public Stream chunkStream;
@@ -49,6 +74,8 @@ public struct OVRMeshData
 {
 	public Mesh mesh;
 	public Material material;
+	public OVRMeshAttributes baseAttributes;
+	public OVRMeshAttributes[] morphTargets;
 }
 
 public struct OVRMaterialData
@@ -56,12 +83,16 @@ public struct OVRMaterialData
 	public Shader shader;
 	public int textureId;
 	public OVRTextureData texture;
+	public Color baseColorFactor;
 }
 
 public struct OVRGLTFScene
 {
 	public GameObject root;
 	public List<GameObject> nodes;
+	public Dictionary<OVRGLTFInputNode, OVRGLTFAnimatinonNode> animationNodes;
+	public Dictionary<int, OVRGLTFAnimatinonNode> animationNodeLookup;
+	public List<OVRGLTFAnimationNodeMorphTargetHandler> morphTargetHandlers;
 }
 
 public struct OVRTextureData
@@ -71,6 +102,17 @@ public struct OVRTextureData
 	public int height;
 	public OVRTextureFormat format;
 	public TextureFormat transcodedFormat;
+	public string uri;
+}
+
+public struct OVRMeshAttributes
+{
+	public Vector3[] vertices;
+	public Vector3[] normals;
+	public Vector4[] tangents;
+	public Vector2[] texcoords;
+	public Color[] colors;
+	public BoneWeight[] boneWeights;
 }
 
 public class OVRGLTFLoader
@@ -80,11 +122,33 @@ public class OVRGLTFLoader
 	private OVRBinaryChunk m_binaryChunk;
 
 	private List<GameObject> m_Nodes;
-
-	private static readonly Vector3 GLTFToUnitySpace = new Vector3(-1, 1, 1);
-	private static readonly Vector3 GLTFToUnityTangent = new Vector4(-1, 1, 1, -1);
+	private Dictionary<OVRGLTFInputNode, OVRGLTFAnimatinonNode> m_InputAnimationNodes;
+	// <animationIndex, OVRGLTFAnimatinonNode>
+	private Dictionary<int, OVRGLTFAnimatinonNode> m_AnimationLookup;
+	// <nodeIndex, OVRGLTFAnimatinonNodeMorphTargetHandler>
+	private Dictionary<int, OVRGLTFAnimationNodeMorphTargetHandler> m_morphTargetHandlers;
 
 	private Shader m_Shader = null;
+	private Shader m_AlphaBlendShader = null;
+	private OVRTextureQualityFiltering m_TextureQuality = OVRTextureQualityFiltering.Bilinear;  // = Unity default
+	private float m_TextureMipmapBias = 0.0f;	// = shader default
+
+	public static readonly Vector3 GLTFToUnitySpace = new Vector3(-1, 1, 1);
+	public static readonly Vector3 GLTFToUnityTangent = new Vector4(-1, 1, 1, -1);
+	public static readonly Vector4 GLTFToUnitySpace_Rotation = new Vector4(1, -1, -1, 1);
+
+	private static Dictionary<string, OVRGLTFInputNode> InputNodeNameMap = new Dictionary<string, OVRGLTFInputNode>{
+		{"button_a", OVRGLTFInputNode.Button_A_X },
+		{"button_x", OVRGLTFInputNode.Button_A_X },
+		{"button_b", OVRGLTFInputNode.Button_B_Y },
+		{"button_y", OVRGLTFInputNode.Button_B_Y },
+		{"button_oculus", OVRGLTFInputNode.Button_Oculus_Menu },
+		{"trigger_front", OVRGLTFInputNode.Trigger_Front },
+		{"trigger_grip", OVRGLTFInputNode.Trigger_Grip},
+		{"thumbstick", OVRGLTFInputNode.ThumbStick },
+	};
+
+	public Func<string, Material, Texture2D> textureUriHandler;
 
 	public OVRGLTFLoader(string fileName)
 	{
@@ -96,12 +160,15 @@ public class OVRGLTFLoader
 		m_glbStream = new MemoryStream(data, 0, data.Length, false, true);
 	}
 
-	public OVRGLTFScene LoadGLB(bool loadMips = true)
+	public OVRGLTFScene LoadGLB(bool supportAnimation, bool loadMips = true)
 	{
 		OVRGLTFScene scene = new OVRGLTFScene();
 		m_Nodes = new List<GameObject>();
+		m_InputAnimationNodes = new Dictionary<OVRGLTFInputNode, OVRGLTFAnimatinonNode>();
+		m_AnimationLookup = new Dictionary<int, OVRGLTFAnimatinonNode>();
+		m_morphTargetHandlers = new Dictionary<int, OVRGLTFAnimationNodeMorphTargetHandler>();
 
-		int rootNodeId = 0;
+        int rootNodeId = 0;
 		if (ValidateGLB(m_glbStream))
 		{
 			byte[] jsonChunkData = ReadChunk(m_glbStream, OVRChunkType.JSON);
@@ -124,14 +191,35 @@ public class OVRGLTFLoader
 					Debug.LogWarning("A shader was not set before loading the model. Using default mobile shader.");
 					m_Shader = Shader.Find("Legacy Shaders/Diffuse");
 				}
+				if (m_AlphaBlendShader == null)
+				{
+					Debug.LogWarning("An alpha blend shader was not set before loading the model. Using default transparent shader.");
+					m_AlphaBlendShader = Shader.Find("Unlit/Transparent");
+				}
 
-				rootNodeId = LoadGLTF(loadMips);
+				rootNodeId = LoadGLTF(supportAnimation, loadMips);
+				if (rootNodeId < 0)
+				{
+					m_glbStream.Close();
+					return scene;
+				}
 			}
 		}
 		m_glbStream.Close();
 
 		scene.nodes = m_Nodes;
-		scene.root = m_Nodes[rootNodeId];
+		scene.root = new GameObject("GLB Scene Root");
+		scene.animationNodes = m_InputAnimationNodes;
+		scene.animationNodeLookup = m_AnimationLookup;
+		scene.morphTargetHandlers = m_morphTargetHandlers.Values.ToList();
+
+        foreach (GameObject node in m_Nodes)
+		{
+			if (node.transform.parent == null)
+			{
+				node.transform.SetParent(scene.root.transform);
+			}
+		}
 
 		scene.root.transform.Rotate(Vector3.up, 180.0f);
 
@@ -141,6 +229,98 @@ public class OVRGLTFLoader
 	public void SetModelShader(Shader shader)
 	{
 		m_Shader = shader;
+	}
+
+	public void SetModelAlphaBlendShader(Shader shader)
+	{
+		m_AlphaBlendShader = shader;
+	}
+
+	/// <summary>
+	/// All textures in the glb will be loaded with the following setting. The default is Bilinear.
+	/// Once loaded, textures will be read-only on GPU memory.
+	/// </summary>
+	/// <param name="loadedTexturesQuality">The quality setting.</param>
+	public void SetTextureQualityFiltering(OVRTextureQualityFiltering loadedTexturesQuality)
+	{
+		m_TextureQuality = loadedTexturesQuality;
+	}
+
+	/// <summary>
+	/// All textures in the glb will be preset with this MipMap value. The default is 0.
+	/// Only supported when MipMaps are loaded and the provided shader has a property named "_MainTexMMBias"
+	/// </summary>
+	/// <param name="loadedTexturesMipmapBiasing">The value for bias. Value is clamped between [-1,1]</param>
+	public void SetMipMapBias(float loadedTexturesMipmapBiasing)
+	{
+		m_TextureMipmapBias = Mathf.Clamp(loadedTexturesMipmapBiasing, -1.0f, 1.0f);
+	}
+
+	/// <summary>
+	/// Decodes the Texture Quality setting from the input Texture2D properties' values.
+	/// </summary>
+	/// <param name="srcTexture">The input Texture2D</param>
+	/// <returns>The enum TextureQualityFiltering representing the quality.</returns>
+	public static OVRTextureQualityFiltering DetectTextureQuality(in Texture2D srcTexture)
+	{
+		OVRTextureQualityFiltering quality = OVRTextureQualityFiltering.None;
+		switch (srcTexture.filterMode)
+		{
+			case FilterMode.Point:
+				quality = OVRTextureQualityFiltering.None;
+				break;
+			case FilterMode.Bilinear:
+				goto default;
+			case FilterMode.Trilinear:
+				if (srcTexture.anisoLevel <= 1)
+					quality = OVRTextureQualityFiltering.Trilinear;
+				// In theory, aniso supports values between 2-16x, but in reality GPUs and gfx APIs implement powers of 2 (values in between have no change)
+				else if (srcTexture.anisoLevel < 4)
+					quality = OVRTextureQualityFiltering.Aniso2x;
+				else if (srcTexture.anisoLevel < 8)
+					quality = OVRTextureQualityFiltering.Aniso4x;
+				else if (srcTexture.anisoLevel < 16)
+					quality = OVRTextureQualityFiltering.Aniso8x;
+				else
+					quality = OVRTextureQualityFiltering.Aniso16x;
+				break;
+			default:
+				quality = OVRTextureQualityFiltering.Bilinear;
+				break;
+		}
+		return quality;
+	}
+
+	/// <summary>
+	/// Applies the input Texture Quality setting into the ref Texture2D provided as input. Texture2D must not be readonly.
+	/// </summary>
+	/// <param name="qualityLevel">The quality level to apply</param>
+	/// <param name="destTexture">The destination Texture2D to apply quality setting to</param>
+	public static void ApplyTextureQuality(OVRTextureQualityFiltering qualityLevel, ref Texture2D destTexture)
+	{
+		if (destTexture == null)
+			return;
+
+		switch (qualityLevel)
+		{
+			case OVRTextureQualityFiltering.None:
+				destTexture.filterMode = FilterMode.Point;
+				destTexture.anisoLevel = 0;
+				break;
+			case OVRTextureQualityFiltering.Bilinear:
+				destTexture.filterMode = FilterMode.Bilinear;
+				destTexture.anisoLevel = 0;
+				break;
+			case OVRTextureQualityFiltering.Trilinear:
+				destTexture.filterMode = FilterMode.Trilinear;
+				destTexture.anisoLevel = 0;
+				break;
+			default:    // for higher values
+				destTexture.filterMode = FilterMode.Trilinear;
+				// In theory, aniso supports values between 2-16x, but in reality GPUs and gfx APIs implement powers of 2 (values in between have no change)
+				destTexture.anisoLevel = Mathf.FloorToInt(Mathf.Pow(2.0f, (int)qualityLevel - 1));   // given the enum value, this gives aniso x2 x4 x8 x16
+				break;
+		}
 	}
 
 	private bool ValidateGLB(Stream glbStream)
@@ -208,17 +388,19 @@ public class OVRGLTFLoader
 		return true;
 	}
 
-	private int LoadGLTF(bool loadMips)
+	private int LoadGLTF(bool supportAnimation, bool loadMips)
 	{
 		if (m_jsonData == null)
 		{
 			Debug.LogError("m_jsonData was null");
+			return -1;
 		}
 
 		var scenes = m_jsonData["scenes"];
 		if (scenes.Count == 0)
 		{
 			Debug.LogError("No valid scenes in this glTF.");
+			return -1;
 		}
 
 		// Create GameObjects for each node in the model so that they can be referenced during processing
@@ -234,11 +416,17 @@ public class OVRGLTFLoader
 		var mainScene = scenes[0];
 		var rootNodes = mainScene["nodes"].AsArray;
 
-		// Limit loading to first root node in the scene
-		int rootNodeId = rootNodes[0].AsInt;
-		ProcessNode(m_jsonData["nodes"][rootNodeId], rootNodeId, loadMips);
+		// Load all nodes (some models like e.g. laptops use multiple nodes)
+		foreach (JSONNode rootNode in rootNodes)
+		{
+			int rootNodeId = rootNode.AsInt;
+			ProcessNode(m_jsonData["nodes"][rootNodeId], rootNodeId, loadMips);
+		}
 
-		return rootNodeId;
+		if(supportAnimation)
+			ProcessAnimations();
+
+        return rootNodes[0].AsInt;
 	}
 
 	private void ProcessNode(JSONNode node, int nodeId, bool loadMips)
@@ -251,7 +439,7 @@ public class OVRGLTFLoader
 			{
 				int childId = childNodes[i].AsInt;
 				m_Nodes[childId].transform.SetParent(m_Nodes[nodeId].transform);
-				ProcessNode(m_jsonData["nodes"][childId], childId, loadMips);
+                ProcessNode(m_jsonData["nodes"][childId], childId, loadMips);
 			}
 		}
 
@@ -282,6 +470,10 @@ public class OVRGLTFLoader
 				filter.sharedMesh = meshData.mesh;
 				var renderer = m_Nodes[nodeId].AddComponent<MeshRenderer>();
 				renderer.sharedMaterial = meshData.material;
+			}
+			if (meshData.morphTargets != null)
+			{
+				m_morphTargetHandlers[nodeId] = new OVRGLTFAnimationNodeMorphTargetHandler(meshData);
 			}
 		}
 
@@ -333,37 +525,6 @@ public class OVRGLTFLoader
 		}
 
 		int[][] indicies = new int[primitives.Count][];
-		Vector3[] vertices = new Vector3[totalVertexCount];
-
-		Vector3[] normals = null;
-		if (primitives[0]["attributes"]["NORMAL"] != null)
-		{
-			normals = new Vector3[totalVertexCount];
-		}
-
-		Vector4[] tangents = null;
-		if (primitives[0]["attributes"]["TANGENT"] != null)
-		{
-			tangents = new Vector4[totalVertexCount];
-		}
-
-		Vector2[] texcoords = null;
-		if (primitives[0]["attributes"]["TEXCOORD_0"] != null)
-		{
-			texcoords = new Vector2[totalVertexCount];
-		}
-
-		Color[] colors = null;
-		if (primitives[0]["attributes"]["COLOR_0"] != null)
-		{
-			colors = new Color[totalVertexCount];
-		}
-
-		BoneWeight[] boneWeights = null;
-		if (primitives[0]["attributes"]["WEIGHTS_0"] != null)
-		{
-			boneWeights = new BoneWeight[totalVertexCount];
-		}
 
 		// Begin async processing of material and its texture
 		OVRMaterialData matData = default(OVRMaterialData);
@@ -375,6 +536,9 @@ public class OVRGLTFLoader
 			matData.texture = ProcessTexture(matData.textureId);
 			transcodeTask = Task.Run(() => { TranscodeTexture(ref matData.texture); });
 		}
+
+		OVRMeshAttributes attributes = new OVRMeshAttributes();
+		OVRMeshAttributes[] morphTargetAttributes = null;
 
 		int vertexOffset = 0;
 		for (int i = 0; i < primitives.Count; i++)
@@ -389,73 +553,16 @@ public class OVRGLTFLoader
 			indicesReader.ReadAsInt(m_binaryChunk, ref indicies[i], 0);
 			FlipTraingleIndices(ref indicies[i]);
 
-			var jsonAttribute = jsonPrimitive["attributes"]["POSITION"];
+			attributes = ReadMeshAttributes(jsonPrimitive["attributes"], totalVertexCount, vertexOffset);
+
+			// morph targets
+			var jsonAttribute = jsonPrimitive["targets"];
 			if (jsonAttribute != null)
 			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-				dataReader.ReadAsVector3(m_binaryChunk, ref vertices, vertexOffset, GLTFToUnitySpace);
-			}
-
-			jsonAttribute = jsonPrimitive["attributes"]["NORMAL"];
-			if (jsonAttribute != null)
-			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-				dataReader.ReadAsVector3(m_binaryChunk, ref normals, vertexOffset, GLTFToUnitySpace);
-			}
-
-			jsonAttribute = jsonPrimitive["attributes"]["TANGENT"];
-			if (jsonAttribute != null)
-			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-				dataReader.ReadAsVector4(m_binaryChunk, ref tangents, vertexOffset, GLTFToUnityTangent);
-			}
-
-			jsonAttribute = jsonPrimitive["attributes"]["TEXCOORD_0"];
-			if (jsonAttribute != null)
-			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-				dataReader.ReadAsVector2(m_binaryChunk, ref texcoords, vertexOffset);
-			}
-
-			jsonAttribute = jsonPrimitive["attributes"]["COLOR_0"];
-			if (jsonAttribute != null)
-			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-				dataReader.ReadAsColor(m_binaryChunk, ref colors, vertexOffset);
-			}
-
-			jsonAttribute = jsonPrimitive["attributes"]["WEIGHTS_0"];
-			if (jsonAttribute != null)
-			{
-				jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
-				OVRGLTFAccessor weightReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
-
-				var jointAttribute = jsonPrimitive["attributes"]["JOINTS_0"];
-				var jointAccessor = m_jsonData["accessors"][jointAttribute.AsInt];
-				OVRGLTFAccessor jointReader = new OVRGLTFAccessor(jointAccessor, m_jsonData);
-
-				Vector4[] weights = new Vector4[weightReader.GetDataCount()];
-				Vector4[] joints = new Vector4[jointReader.GetDataCount()];
-
-				weightReader.ReadAsBoneWeights(m_binaryChunk, ref weights, 0);
-				jointReader.ReadAsVector4(m_binaryChunk, ref joints, 0, Vector4.one);
-
-				for (int w = 0; w < weights.Length; w++)
+				morphTargetAttributes = new OVRMeshAttributes[jsonAttribute.Count];
+				for (var ii = 0; ii < jsonAttribute.Count; ii++)
 				{
-					boneWeights[vertexOffset + w].boneIndex0 = (int)joints[w].x;
-					boneWeights[vertexOffset + w].boneIndex1 = (int)joints[w].y;
-					boneWeights[vertexOffset + w].boneIndex2 = (int)joints[w].z;
-					boneWeights[vertexOffset + w].boneIndex3 = (int)joints[w].w;
-
-					boneWeights[vertexOffset + w].weight0 = weights[w].x;
-					boneWeights[vertexOffset + w].weight1 = weights[w].y;
-					boneWeights[vertexOffset + w].weight2 = weights[w].z;
-					boneWeights[vertexOffset + w].weight3 = weights[w].w;
+					morphTargetAttributes[ii] = ReadMeshAttributes(jsonAttribute[ii], totalVertexCount, vertexOffset);
 				}
 			}
 
@@ -463,12 +570,12 @@ public class OVRGLTFLoader
 		}
 
 		Mesh mesh = new Mesh();
-		mesh.vertices = vertices;
-		mesh.normals = normals;
-		mesh.tangents = tangents;
-		mesh.colors = colors;
-		mesh.uv = texcoords;
-		mesh.boneWeights = boneWeights;
+		mesh.vertices = attributes.vertices;
+		mesh.normals = attributes.normals;
+		mesh.tangents = attributes.tangents;
+		mesh.colors = attributes.colors;
+		mesh.uv = attributes.texcoords;
+		mesh.boneWeights = attributes.boneWeights;
 		mesh.subMeshCount = primitives.Count;
 
 		int baseVertex = 0;
@@ -480,6 +587,12 @@ public class OVRGLTFLoader
 
 		mesh.RecalculateBounds();
 		meshData.mesh = mesh;
+
+		meshData.morphTargets = morphTargetAttributes;
+		if (morphTargetAttributes != null)
+		{
+			meshData.baseAttributes = attributes;
+		}
 
 		if (transcodeTask != null)
 		{
@@ -497,6 +610,87 @@ public class OVRGLTFLoader
 			indices[i] = indices[i + 2];
 			indices[i + 2] = a;
 		}
+	}
+
+	private OVRMeshAttributes ReadMeshAttributes(JSONNode jsonAttributes, int totalVertexCount, int vertexOffset)
+	{
+		OVRMeshAttributes results = new OVRMeshAttributes();
+		var jsonAttribute = jsonAttributes["POSITION"];
+		if (jsonAttribute != null)
+		{
+			results.vertices = new Vector3[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+			dataReader.ReadAsVector3(m_binaryChunk, ref results.vertices, vertexOffset, GLTFToUnitySpace);
+		}
+
+		jsonAttribute = jsonAttributes["NORMAL"];
+		if (jsonAttribute != null)
+		{
+			results.normals = new Vector3[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+			dataReader.ReadAsVector3(m_binaryChunk, ref results.normals, vertexOffset, GLTFToUnitySpace);
+		}
+
+		jsonAttribute = jsonAttributes["TANGENT"];
+		if (jsonAttribute != null)
+		{
+			results.tangents = new Vector4[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+			dataReader.ReadAsVector4(m_binaryChunk, ref results.tangents, vertexOffset, GLTFToUnityTangent);
+		}
+
+		jsonAttribute = jsonAttributes["TEXCOORD_0"];
+		if (jsonAttribute != null)
+		{
+			results.texcoords = new Vector2[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+			dataReader.ReadAsVector2(m_binaryChunk, ref results.texcoords, vertexOffset);
+		}
+
+		jsonAttribute = jsonAttributes["COLOR_0"];
+		if (jsonAttribute != null)
+		{
+			results.colors = new Color[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+			dataReader.ReadAsColor(m_binaryChunk, ref results.colors, vertexOffset);
+		}
+
+		jsonAttribute = jsonAttributes["WEIGHTS_0"];
+		if (jsonAttribute != null)
+		{
+			results.boneWeights = new BoneWeight[totalVertexCount];
+			var jsonAccessor = m_jsonData["accessors"][jsonAttribute.AsInt];
+			OVRGLTFAccessor weightReader = new OVRGLTFAccessor(jsonAccessor, m_jsonData);
+
+			var jointAttribute = jsonAttributes["JOINTS_0"];
+			var jointAccessor = m_jsonData["accessors"][jointAttribute.AsInt];
+			OVRGLTFAccessor jointReader = new OVRGLTFAccessor(jointAccessor, m_jsonData);
+
+			Vector4[] weights = new Vector4[weightReader.GetDataCount()];
+			Vector4[] joints = new Vector4[jointReader.GetDataCount()];
+
+			weightReader.ReadAsBoneWeights(m_binaryChunk, ref weights, 0);
+			jointReader.ReadAsVector4(m_binaryChunk, ref joints, 0, Vector4.one);
+
+			for (int w = 0; w < weights.Length; w++)
+			{
+				results.boneWeights[vertexOffset + w].boneIndex0 = (int)joints[w].x;
+				results.boneWeights[vertexOffset + w].boneIndex1 = (int)joints[w].y;
+				results.boneWeights[vertexOffset + w].boneIndex2 = (int)joints[w].z;
+				results.boneWeights[vertexOffset + w].boneIndex3 = (int)joints[w].w;
+
+				results.boneWeights[vertexOffset + w].weight0 = weights[w].x;
+				results.boneWeights[vertexOffset + w].weight1 = weights[w].y;
+				results.boneWeights[vertexOffset + w].weight2 = weights[w].z;
+				results.boneWeights[vertexOffset + w].weight3 = weights[w].w;
+			}
+		}
+		return results;
 	}
 
 	private void ProcessSkin(JSONNode skinNode, SkinnedMeshRenderer renderer)
@@ -539,7 +733,19 @@ public class OVRGLTFLoader
 		OVRMaterialData matData = new OVRMaterialData();
 
 		var jsonMaterial = m_jsonData["materials"][matId];
+
+		var jsonAlphaMode = jsonMaterial["alphaMode"];
+		bool alphaBlendMode = jsonAlphaMode != null && jsonAlphaMode.Value == "BLEND";
+
 		var jsonPbrDetails = jsonMaterial["pbrMetallicRoughness"];
+
+		matData.baseColorFactor = Color.white; // GLTF Default
+		var jsonBaseColorFactor = jsonPbrDetails["baseColorFactor"];
+		if (jsonBaseColorFactor != null)
+		{
+			matData.baseColorFactor = new Color(jsonBaseColorFactor[0].AsFloat, jsonBaseColorFactor[1].AsFloat,
+				jsonBaseColorFactor[2].AsFloat, jsonBaseColorFactor[3].AsFloat);
+		}
 
 		var jsonBaseColor = jsonPbrDetails["baseColorTexture"];
 		if (jsonBaseColor != null)
@@ -557,7 +763,7 @@ public class OVRGLTFLoader
 			}
 		}
 
-		matData.shader = m_Shader;
+		matData.shader = alphaBlendMode ? m_AlphaBlendShader : m_Shader;
 		return matData;
 	}
 
@@ -581,6 +787,15 @@ public class OVRGLTFLoader
 		}
 		var jsonSource = m_jsonData["images"][imageSource];
 
+		OVRTextureData textureData = new OVRTextureData();
+
+		var jsonSourceUri = jsonSource["uri"].Value;
+		if (!String.IsNullOrEmpty(jsonSourceUri))
+		{
+			textureData.uri = jsonSourceUri;
+			return textureData;
+		}
+
 		int sampler = jsonTexture["sampler"].AsInt;
 		var jsonSampler = m_jsonData["samplers"][sampler];
 
@@ -588,24 +803,37 @@ public class OVRGLTFLoader
 		var jsonBufferView = m_jsonData["bufferViews"][bufferViewId];
 		OVRGLTFAccessor dataReader = new OVRGLTFAccessor(jsonBufferView, m_jsonData, true);
 
-		OVRTextureData textureData = new OVRTextureData();
-		if (jsonSource["mimeType"].Value == "image/ktx2")
+
+		switch (jsonSource["mimeType"].Value)
 		{
-			textureData.data = dataReader.ReadAsKtxTexture(m_binaryChunk);
-			textureData.format = OVRTextureFormat.KTX2;
-		}
-		else
-		{
-			Debug.LogWarning("Unsupported image mimeType.");
+			case "image/ktx2":
+				textureData.data = dataReader.ReadAsTexture(m_binaryChunk);
+				textureData.format = OVRTextureFormat.KTX2;
+				break;
+			case "image/png":
+				textureData.data = dataReader.ReadAsTexture(m_binaryChunk);
+				textureData.format = OVRTextureFormat.PNG;
+				break;
+			default:
+				Debug.LogWarning($"Unsupported image mimeType '{jsonSource["mimeType"].Value}'");
+				break;
 		}
 		return textureData;
 	}
 
 	private void TranscodeTexture(ref OVRTextureData textureData)
 	{
+		if (!String.IsNullOrEmpty(textureData.uri))
+		{
+			return;
+		}
 		if (textureData.format == OVRTextureFormat.KTX2)
 		{
 			OVRKtxTexture.Load(textureData.data, ref textureData);
+		}
+		else if (textureData.format == OVRTextureFormat.PNG)
+		{
+			// fall back to unity Texture2D.LoadImage, which will override dimensions & format.
 		}
 		else
 		{
@@ -617,14 +845,77 @@ public class OVRGLTFLoader
 	{
 		Material mat = new Material(matData.shader);
 
+		mat.color = matData.baseColorFactor;
+
+		if (loadMips && mat.HasProperty("_MainTexMMBias"))
+			mat.SetFloat("_MainTexMMBias", m_TextureMipmapBias);
+
+		Texture2D texture = null;
+
 		if (matData.texture.format == OVRTextureFormat.KTX2)
 		{
-			Texture2D texture;
 			texture = new Texture2D(matData.texture.width, matData.texture.height, matData.texture.transcodedFormat, loadMips);
 			texture.LoadRawTextureData(matData.texture.data);
-			texture.Apply(false, true);
-			mat.mainTexture = texture;
+
 		}
+		else if (matData.texture.format == OVRTextureFormat.PNG)
+		{
+			texture = new Texture2D(2,2, TextureFormat.RGBA32, loadMips);
+			texture.LoadImage(matData.texture.data);
+		}
+		else if (!String.IsNullOrEmpty(matData.texture.uri))
+		{
+			texture = textureUriHandler?.Invoke(matData.texture.uri, mat);
+		}
+
+		if (!texture) return mat;
+
+		ApplyTextureQuality(m_TextureQuality, ref texture);
+		texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+		mat.mainTexture = texture;
+
 		return mat;
+	}
+
+	private OVRGLTFInputNode GetInputNodeType(string name)
+	{
+		foreach (var item in InputNodeNameMap)
+		{
+			if (name.Contains(item.Key))
+			{
+				return item.Value;
+			}
+		}
+		return OVRGLTFInputNode.None;
+	}
+
+	private void ProcessAnimations()
+	{
+		var animations = m_jsonData["animations"];
+		var animationIndex = 0;
+		foreach (JSONNode animation in animations.AsArray)
+		{
+			//We don't need animation name at this moment
+			//string name = animation["name"].ToString();
+			var channels = animation["channels"].AsArray;
+			foreach (JSONNode channel in channels)
+			{
+				int nodeId = channel["target"]["node"].AsInt;
+
+				OVRGLTFInputNode inputNodeType = GetInputNodeType(m_Nodes[nodeId].name);
+				if (!m_AnimationLookup.TryGetValue(animationIndex, out var animationNode))
+				{
+					m_morphTargetHandlers.TryGetValue(nodeId, out var morphTargetHandler);
+					animationNode = new OVRGLTFAnimatinonNode(m_jsonData, m_binaryChunk, inputNodeType, m_Nodes[nodeId], morphTargetHandler);
+					m_AnimationLookup[animationIndex] = animationNode;
+					if (inputNodeType != OVRGLTFInputNode.None)
+					{
+						m_InputAnimationNodes.Add(inputNodeType, animationNode);
+					}
+				}
+				animationNode.AddChannel(channel, animation["samplers"]);
+			}
+			animationIndex++;
+		}
 	}
 }

@@ -1,14 +1,22 @@
-/************************************************************************************
-Copyright : Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
-
-Your use of this SDK or tool is subject to the Oculus SDK License Agreement, available at
-https://developer.oculus.com/licenses/oculussdk/
-
-Unless required by applicable law or agreed to in writing, the Utilities SDK distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
-ANY KIND, either express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-************************************************************************************/
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * Licensed under the Oculus SDK License Agreement (the "License");
+ * you may not use the Oculus SDK except in compliance with the License,
+ * which is provided at the time of installation or download, or which
+ * otherwise accompanies this software in either electronic or hard copy form.
+ *
+ * You may obtain a copy of the License at
+ *
+ * https://developer.oculus.com/licenses/oculussdk/
+ *
+ * Unless required by applicable law or agreed to in writing, the Oculus SDK
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 #define OVR_ANDROID_MRC
@@ -38,18 +46,18 @@ public class OVRExternalComposition : OVRComposition
 	private bool skipFrame = false;
 	private float fpsThreshold = 80.0f;
 	private bool isFrameSkipped = true;
-	public bool renderCombinedFrame = false;
-	public AudioListener audioListener;
-	public OVRMRAudioFilter audioFilter;
-	public RenderTexture[] mrcRenderTextureArray = new RenderTexture[2];
-	public int frameIndex;
-	public int lastMrcEncodeFrameSyncId;
+	private bool renderCombinedFrame = false;
+	private AudioListener audioListener;
+	private OVRMRAudioFilter audioFilter;
+	private RenderTexture[] mrcRenderTextureArray = new RenderTexture[2];
+	private int frameIndex;
+	private int lastMrcEncodeFrameSyncId;
 
 	// when rendererSupportsCameraRect is false, mrcRenderTextureArray would only store the background frame (regular width)
-	public RenderTexture[] mrcForegroundRenderTextureArray = new RenderTexture[2];
+	private RenderTexture[] mrcForegroundRenderTextureArray = new RenderTexture[2];
 
 	// this is used for moving MRC camera where we would need to be able to synchronize the camera position from the game with that on the client for composition
-	public double[] cameraPoseTimeArray = new double[2];
+	private double[] cameraPoseTimeArray = new double[2];
 #endif
 
 	public override OVRManager.CompositionMethod CompositionMethod() { return OVRManager.CompositionMethod.External; }
@@ -201,6 +209,13 @@ public class OVRExternalComposition : OVRComposition
 				foregroundCamera.rect = new Rect(0.0f, 0.0f, 1.0f, 1.0f);
 			}
 #endif
+
+			// [Debug] Uncommenting the following code will put a cube on the external camera location for visualization
+			//GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+			//cube.transform.parent = foregroundCameraGameObject.transform;
+			//cube.transform.localPosition = Vector3.zero;
+			//cube.transform.localRotation = Quaternion.identity;
+			//cube.transform.localScale = Vector3.one * 0.1f;
 
 			previousMainCameraObject = mainCamera.gameObject;
 		}
