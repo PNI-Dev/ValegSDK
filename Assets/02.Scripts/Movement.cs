@@ -72,7 +72,7 @@ public class Movement : MonoBehaviour
         }
     }
 
-    private bool _isValegOn => IsActiveControl();
+    private bool _isValegOn => IsActiveValeg();
 
     // Floats
     /// <summary>
@@ -176,7 +176,7 @@ public class Movement : MonoBehaviour
 
     #region 인풋값 메서드
     // 조이스틱 연결 유무
-    private bool IsActiveControl()
+    private bool IsActiveValeg()
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         return NativeInputDeviceManager.isValegOn;
