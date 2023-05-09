@@ -457,7 +457,7 @@ public class Movement : MonoBehaviour
 
     private bool IsAButtonPressed()
     {
-        return OVRInput.GetDown(OVRInput.Button.One);
+        return OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch);
     }
 
     private void UpdateOriginAngle(float inputRotate)
