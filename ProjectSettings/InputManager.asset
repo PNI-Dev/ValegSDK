@@ -3767,7 +3767,7 @@ InputManager:
     joyNum: 1
   - serializedVersion: 3
     m_Name: Axis_4_Valeg
-    descriptiveName: Forward / Back
+    descriptiveName: Left / Right
     descriptiveNegativeName: 
     negativeButton: 
     positiveButton: 
@@ -3783,7 +3783,7 @@ InputManager:
     joyNum: 1
   - serializedVersion: 3
     m_Name: Axis_3_Oculus
-    descriptiveName: Left / Right
+    descriptiveName: Forward / Back
     descriptiveNegativeName: 
     negativeButton: 
     positiveButton: 
@@ -3815,7 +3815,7 @@ InputManager:
     joyNum: 2
   - serializedVersion: 3
     m_Name: Axis_4_Oculus
-    descriptiveName: Forward / Back
+    descriptiveName: Left / Right
     descriptiveNegativeName: 
     negativeButton: 
     positiveButton: 
