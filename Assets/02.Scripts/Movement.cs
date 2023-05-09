@@ -232,12 +232,20 @@ public class Movement : MonoBehaviour
     // 조이스틱 회전 입력값
     private float GetRotateValue()
     {
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+#if UNITY_STANDALONE_WIN|| UNITY_EDITOR_WIN
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
         return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
 #else
-        var v = Input.GetAxis("Axis_14");
-        return v;
+        if (_isControlModeButton)
+        {
+            float input = Input.GetAxis("Axis_14_Oculus");
+            return input;
+        }
+        else
+        {
+            float input = Input.GetAxis("Axis_14_Valeg");
+            return input;
+        }
 #endif
     }
     #endregion
