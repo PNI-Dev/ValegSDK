@@ -42,6 +42,11 @@ public class Movement : MonoBehaviour
     /// </summary>
     private int _sideSpeedLevel = 2;
 
+    /// <summary>
+    /// 컨트롤러 모드, 발레그 전후좌우 입력이 들어가지 않음
+    /// </summary>
+    private bool _isControlModeButton = false;
+
     // Properties
     public int InterPolationLevel
     {
@@ -185,6 +190,7 @@ public class Movement : MonoBehaviour
         return gamepads.Count > 0;
 #endif
     }
+
     // 조이스틱 좌우 입력값
     private float GetHorizontalValue()
     {
@@ -192,8 +198,16 @@ public class Movement : MonoBehaviour
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
         return input;
 #else
-        float input = Input.GetAxis("Axis_4");
-        return input;
+        if (_isControlModeButton)
+        {
+            float input = Input.GetAxis("Axis_4_Oculus");
+            return input;
+        }
+        else
+        {
+            float input = Input.GetAxis("Axis_4_Valeg");
+            return input;
+        }
 #endif
     }
     // 조이스틱 전후진 입력값
@@ -203,8 +217,16 @@ public class Movement : MonoBehaviour
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
         return -input;
 #else
-        float input = Input.GetAxis("Axis_3");
-        return -input;
+        if (_isControlModeButton)
+        {
+            float input = Input.GetAxis("Axis_3_Oculus");
+            return -input;
+        }
+        else
+        {
+            float input = Input.GetAxis("Axis_3_Valeg");
+            return -input;
+        }
 #endif
     }
     // 조이스틱 회전 입력값
@@ -216,7 +238,6 @@ public class Movement : MonoBehaviour
 #else
         var v = Input.GetAxis("Axis_14");
         return v;
-       
 #endif
     }
     #endregion
