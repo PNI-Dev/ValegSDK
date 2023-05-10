@@ -3734,7 +3734,7 @@ InputManager:
     axis: 5
     joyNum: 16
   - serializedVersion: 3
-    m_Name: Axis_3_Valeg
+    m_Name: Axis_3
     descriptiveName: Forward / Back
     descriptiveNegativeName: 
     negativeButton: 
@@ -3748,9 +3748,9 @@ InputManager:
     invert: 0
     type: 2
     axis: 1
-    joyNum: 1
+    joyNum: 0
   - serializedVersion: 3
-    m_Name: Axis_14_Valeg
+    m_Name: Axis_14
     descriptiveName: Rotate
     descriptiveNegativeName: 
     negativeButton: 
@@ -3764,9 +3764,9 @@ InputManager:
     invert: 0
     type: 2
     axis: 3
-    joyNum: 1
+    joyNum: 0
   - serializedVersion: 3
-    m_Name: Axis_4_Valeg
+    m_Name: Axis_4
     descriptiveName: Left / Right
     descriptiveNegativeName: 
     negativeButton: 
@@ -3780,53 +3780,5 @@ InputManager:
     invert: 0
     type: 2
     axis: 0
-    joyNum: 1
-  - serializedVersion: 3
-    m_Name: Axis_3_Oculus
-    descriptiveName: Forward / Back
-    descriptiveNegativeName: 
-    negativeButton: 
-    positiveButton: 
-    altNegativeButton: 
-    altPositiveButton: 
-    gravity: 0
-    dead: 0
-    sensitivity: 1
-    snap: 0
-    invert: 0
-    type: 2
-    axis: 1
-    joyNum: 2
-  - serializedVersion: 3
-    m_Name: Axis_14_Oculus
-    descriptiveName: Rotate
-    descriptiveNegativeName: 
-    negativeButton: 
-    positiveButton: 
-    altNegativeButton: 
-    altPositiveButton: 
-    gravity: 0
-    dead: 0
-    sensitivity: 1
-    snap: 0
-    invert: 0
-    type: 2
-    axis: 3
-    joyNum: 2
-  - serializedVersion: 3
-    m_Name: Axis_4_Oculus
-    descriptiveName: Left / Right
-    descriptiveNegativeName: 
-    negativeButton: 
-    positiveButton: 
-    altNegativeButton: 
-    altPositiveButton: 
-    gravity: 0
-    dead: 0
-    sensitivity: 1
-    snap: 0
-    invert: 0
-    type: 2
-    axis: 0
-    joyNum: 2
+    joyNum: 0
   m_UsePhysicalKeys: 0

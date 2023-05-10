@@ -4,9 +4,15 @@ using InControl;
 using System.Linq;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
+using UnityEngine.XR;
 
 public class Movement : MonoBehaviour
 {
+    private string valegName = "nESP";
+    private UnityEngine.XR.InputDevice _xrLeftHand => InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+    private UnityEngine.XR.InputDevice _xrRightHand => InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+
+
     [Space(15)]
     /// <summary>
     /// 카메라가 붙어 있는 상위 부모 오브젝트
@@ -45,7 +51,6 @@ public class Movement : MonoBehaviour
     /// <summary>
     /// 컨트롤러 모드, 발레그 전후좌우 입력이 들어가지 않음
     /// </summary>
-    private bool _isControlModeButton = false;
 
     // Properties
     public int InterPolationLevel
@@ -78,6 +83,7 @@ public class Movement : MonoBehaviour
     }
 
     private bool _isValegOn => IsActiveValeg();
+    private bool _isControlMode = false;
 
     // Floats
     /// <summary>
@@ -130,6 +136,8 @@ public class Movement : MonoBehaviour
     // Components
     private CharacterController _characterController;
 
+    public TextMeshProUGUI _testText;
+
     /// <summary>
     /// Window, 유니티 Editor용 변수
     /// </summary>
@@ -151,6 +159,12 @@ public class Movement : MonoBehaviour
             return;
         }
 
+        if (_xrLeftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool primaryButtonValue) && primaryButtonValue)
+        {
+            _isControlMode = !_isControlMode;
+            _testText.text = $"_isControlMode : {_isControlMode}";
+        }
+
         // 윈도우 빌드용과 유니티 에디터 전용 (윈도우, 안드로이드 포함)
         // apk로 추출하면 적용되지 않습니다.
 
@@ -168,7 +182,6 @@ public class Movement : MonoBehaviour
         InputManager.ActiveDevice.GetControl(InputControlType.Analog1).UpperDeadZone = _upper;
 
 #endif
-
         // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
         SetOVRCameraPosition();
         //플레이어 이동
@@ -186,8 +199,15 @@ public class Movement : MonoBehaviour
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         return NativeInputDeviceManager.isValegOn;
 #else
-        List<Gamepad> gamepads = new List<Gamepad>(Gamepad.all);
-        return gamepads.Count > 0;
+        var gamepads = Gamepad.all;
+        foreach (var gamepad in gamepads)
+        {
+            if (gamepad.device.description.ToString().StartsWith(valegName))
+            {
+                return true;
+            }
+        }
+        return false;
 #endif
     }
 
@@ -198,16 +218,20 @@ public class Movement : MonoBehaviour
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog5).Value);
         return input;
 #else
-        if (_isControlModeButton)
+        if (_isControlMode)
         {
-            float input = Input.GetAxis("Axis_4_Oculus");
-            return input;
+            if (_xrLeftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 primary2DAxisValue))
+            {
+                return primary2DAxisValue.x; // 좌우 이동을 위해 x 값을 반환합니다.
+            }
         }
         else
         {
-            float input = Input.GetAxis("Axis_4_Valeg");
+            float input = Input.GetAxis("Axis_4");
             return input;
         }
+
+        return 0f;
 #endif
     }
     // 조이스틱 전후진 입력값
@@ -217,35 +241,43 @@ public class Movement : MonoBehaviour
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog4).Value);
         return -input;
 #else
-        if (_isControlModeButton)
+        if (_isControlMode)
         {
-            float input = Input.GetAxis("Axis_3_Oculus");
-            return -input;
+            if (_xrLeftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 primary2DAxisValue))
+            {
+                return -primary2DAxisValue.y; // 전후 이동을 위해 y 값을 반환합니다.
+            }
         }
         else
         {
-            float input = Input.GetAxis("Axis_3_Valeg");
+            float input = Input.GetAxis("Axis_3");
             return -input;
         }
+
+        return 0f;
 #endif
     }
     // 조이스틱 회전 입력값
     private float GetRotateValue()
     {
-#if UNITY_STANDALONE_WIN|| UNITY_EDITOR_WIN
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         float input = (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
         return (InputManager.ActiveDevice.GetControl(InputControlType.Analog1).Value);
 #else
-        if (_isControlModeButton)
+        if (_isControlMode)
         {
-            float input = Input.GetAxis("Axis_14_Oculus");
-            return input;
+            if (_xrRightHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 primary2DAxisValue))
+            {
+                return primary2DAxisValue.x;
+            }
         }
         else
         {
-            float input = Input.GetAxis("Axis_14_Valeg");
+            float input = Input.GetAxis("Axis_14");
             return input;
         }
+
+        return 0f;
 #endif
     }
     #endregion
