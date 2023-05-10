@@ -12,6 +12,8 @@ public class Movement : MonoBehaviour
     private UnityEngine.XR.InputDevice _xrLeftHand => InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
     private UnityEngine.XR.InputDevice _xrRightHand => InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
 
+    private Gamepad ballegLegDevice = null;
+
 
     [Space(15)]
     /// <summary>
@@ -136,8 +138,6 @@ public class Movement : MonoBehaviour
     // Components
     private CharacterController _characterController;
 
-    public TextMeshProUGUI _testText;
-
     /// <summary>
     /// Window, 유니티 Editor용 변수
     /// </summary>
@@ -159,12 +159,6 @@ public class Movement : MonoBehaviour
             return;
         }
 
-        if (_xrLeftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool primaryButtonValue) && primaryButtonValue)
-        {
-            _isControlMode = !_isControlMode;
-            _testText.text = $"_isControlMode : {_isControlMode}";
-        }
-
         // 윈도우 빌드용과 유니티 에디터 전용 (윈도우, 안드로이드 포함)
         // apk로 추출하면 적용되지 않습니다.
 
@@ -184,10 +178,10 @@ public class Movement : MonoBehaviour
 #endif
         // OVRCameraRig가 항상 ForwardBar 위에 위치하게 하기. 
         SetOVRCameraPosition();
-        //플레이어 이동
-        UpdatePlayerMovement();
         //플레이어 회전
         PlayerRotate();
+        //플레이어 이동
+        UpdatePlayerMovement();
         //리센터 (발레그의 전진방향으로 전진이 되지 않을때 오큘러스 카메라 방향으로 수동 조정기능)
         Recenter();
     }
@@ -204,9 +198,11 @@ public class Movement : MonoBehaviour
         {
             if (gamepad.device.description.ToString().StartsWith(valegName))
             {
+                ballegLegDevice = gamepad;
                 return true;
             }
         }
+        ballegLegDevice = null;
         return false;
 #endif
     }
@@ -227,13 +223,17 @@ public class Movement : MonoBehaviour
         }
         else
         {
-            float input = Input.GetAxis("Axis_4");
-            return input;
+            if (ballegLegDevice != null) // 발레그 장치가 감지되었으면
+            {
+                float input = ballegLegDevice.leftStick.x.ReadValue();
+                return input;
+            }
         }
 
         return 0f;
 #endif
     }
+
     // 조이스틱 전후진 입력값
     private float GetVerticalValue()
     {
@@ -245,18 +245,22 @@ public class Movement : MonoBehaviour
         {
             if (_xrLeftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 primary2DAxisValue))
             {
-                return -primary2DAxisValue.y; // 전후 이동을 위해 y 값을 반환합니다.
+                return primary2DAxisValue.y; // 전후 이동을 위해 y 값을 반환합니다.
             }
         }
         else
         {
-            float input = Input.GetAxis("Axis_3");
-            return -input;
+            if (ballegLegDevice != null) // 발레그 장치가 감지되었으면
+            {
+                float input = ballegLegDevice.leftStick.y.ReadValue();
+                return input;
+            }
         }
 
         return 0f;
 #endif
     }
+
     // 조이스틱 회전 입력값
     private float GetRotateValue()
     {
@@ -276,11 +280,12 @@ public class Movement : MonoBehaviour
             float input = Input.GetAxis("Axis_14");
             return input;
         }
-
         return 0f;
 #endif
     }
     #endregion
+
+
 
     #region UI 캔버스 조절 메서드
     //스무딩 슬라이더 조정
